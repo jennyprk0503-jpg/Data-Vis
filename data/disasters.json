@@ -1,0 +1,102 @@
+[
+  {
+    "id": 1,
+    "name": "1931 China Floods",
+    "year": 1931,
+    "type": "flood",
+    "deathToll": 3700000,
+    "durationDays": 180,
+    "longitude": 114.3,
+    "description": "The deadliest natural disaster in recorded history. Seasonal floods across central China inundated an area the size of England, destroying crops and triggering famine."
+  },
+  {
+    "id": 2,
+    "name": "1970 Bhola Cyclone",
+    "year": 1970,
+    "type": "storm",
+    "deathToll": 500000,
+    "durationDays": 3,
+    "longitude": 90.0,
+    "description": "The deadliest tropical cyclone on record struck East Pakistan (now Bangladesh), with a storm surge devastating the low-lying Ganges Delta region."
+  },
+  {
+    "id": 3,
+    "name": "1976 Tangshan Earthquake",
+    "year": 1976,
+    "type": "earthquake",
+    "deathToll": 242000,
+    "durationDays": 1,
+    "longitude": 118.2,
+    "description": "A 7.6 magnitude earthquake struck the industrial city of Tangshan while residents slept, leveling nearly the entire city within seconds."
+  },
+  {
+    "id": 4,
+    "name": "2004 Indian Ocean Tsunami",
+    "year": 2004,
+    "type": "tsunami",
+    "deathToll": 227898,
+    "durationDays": 1,
+    "longitude": 95.8,
+    "description": "A 9.1 magnitude undersea earthquake generated waves up to 30 meters tall, striking 14 countries across South and Southeast Asia."
+  },
+  {
+    "id": 5,
+    "name": "2010 Haiti Earthquake",
+    "year": 2010,
+    "type": "earthquake",
+    "deathToll": 316000,
+    "durationDays": 1,
+    "longitude": -72.3,
+    "description": "A catastrophic 7.0 magnitude earthquake struck near Port-au-Prince, collapsing poorly constructed buildings and leaving 1.5 million homeless."
+  },
+  {
+    "id": 6,
+    "name": "1918 Spanish Flu",
+    "year": 1918,
+    "type": "pandemic",
+    "deathToll": 50000000,
+    "durationDays": 730,
+    "longitude": 0.0,
+    "description": "The most severe pandemic in modern history infected an estimated 500 million people worldwide, killing 5% of the global population in two years."
+  },
+  {
+    "id": 7,
+    "name": "2020 COVID-19",
+    "year": 2020,
+    "type": "pandemic",
+    "deathToll": 6900000,
+    "durationDays": 1095,
+    "longitude": 114.0,
+    "description": "A novel coronavirus emerged in late 2019 and spread globally, triggering the first worldwide pandemic in a century and reshaping modern society."
+  },
+  {
+    "id": 8,
+    "name": "2005 Hurricane Katrina",
+    "year": 2005,
+    "type": "storm",
+    "deathToll": 1833,
+    "durationDays": 7,
+    "longitude": -89.6,
+    "description": "The costliest and one of the deadliest hurricanes in U.S. history breached New Orleans' levees, flooding 80% of the city for weeks."
+  },
+  {
+    "id": 9,
+    "name": "1986 Chernobyl Disaster",
+    "year": 1986,
+    "type": "industrial",
+    "deathToll": 31,
+    "durationDays": 14,
+    "longitude": 30.1,
+    "description": "Reactor No. 4 at the Chernobyl Nuclear Power Plant exploded during a safety test, releasing radioactive contamination across Europe. Long-term casualties remain disputed."
+  },
+  {
+    "id": 10,
+    "name": "2011 Tōhoku Earthquake",
+    "year": 2011,
+    "type": "tsunami",
+    "deathToll": 19747,
+    "durationDays": 1,
+    "longitude": 142.4,
+    "description": "A 9.1 magnitude earthquake off Japan's Pacific coast triggered massive tsunamis that overwhelmed coastal defenses, also causing meltdowns at the Fukushima Daiichi nuclear plant."
+  }
+]
