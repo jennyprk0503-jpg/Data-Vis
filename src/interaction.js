@@ -17,17 +17,17 @@ window.EmberInteraction = (function () {
   // ── Movement config ────────────────────────────────────────────────────────
 
   // Walking speed in world units per second
-  const WALK_SPEED = 2.5;
+  const WALK_SPEED = 3.5;
 
   // Strafe speed (slightly slower than forward)
-  const STRAFE_SPEED = 2.0;
+  const STRAFE_SPEED = 2.8;
 
-  // Smoothing: acceleration factor (0 = instant, 1 = never accelerate)
-  // Lower = snappier, higher = smoother/floatier
-  const ACCEL = 0.08;
+  // Smoothing: acceleration factor — raised for snappier gesture response
+  // 0 = instant snap, 1 = never reaches target
+  const ACCEL = 0.18;
 
   // Deceleration: how fast velocity drops when intent is 0
-  const DECEL = 0.85;
+  const DECEL = 0.80;
 
   // Room bounds — matches scene.js ROOM constants
   // Camera stays inside these margins
@@ -35,7 +35,7 @@ window.EmberInteraction = (function () {
     xMin: -8.5,
     xMax:  8.5,
     zMin: -39,
-    zMax: -0.5,
+    zMax:  1.0,  // allow camera slightly past entrance
   };
 
   // Eye height

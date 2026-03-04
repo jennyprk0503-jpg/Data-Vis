@@ -330,6 +330,57 @@
       to { left: 100%; }
     }
 
+    /* ── Live gesture status bar ── */
+    #gesture-status {
+      position: fixed;
+      bottom: 168px;
+      left: 24px;
+      width: 120px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      z-index: 20;
+      pointer-events: none;
+    }
+
+    .gs-hand {
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,200,100,0.15);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #403020;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+
+    .gs-hand.active {
+      background: rgba(255,180,60,0.2);
+      border-color: rgba(255,180,60,0.6);
+      color: #e8c080;
+    }
+
+    .gs-hand.pinch {
+      background: rgba(255,100,60,0.3);
+      border-color: rgba(255,100,60,0.8);
+      color: #ff8060;
+    }
+
+    .gs-label {
+      font-size: 8px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #504030;
+      text-align: center;
+      flex: 1;
+      transition: color 0.15s;
+    }
+
+    .gs-label.moving { color: #e8c080; }
+
     /* ── Instructions overlay ── */
     #instructions {
       position: fixed;
@@ -409,6 +460,13 @@
   <div id="cam-preview">
     <video id="webcam-video" autoplay playsinline muted></video>
     <canvas id="landmark-canvas"></canvas>
+  </div>
+
+  <!-- Live gesture status (above cam preview) -->
+  <div id="gesture-status">
+    <div class="gs-hand" id="gs-left">L</div>
+    <div class="gs-label" id="gs-action">no hands</div>
+    <div class="gs-hand" id="gs-right">R</div>
   </div>
 
   <!-- Bottom instructions -->

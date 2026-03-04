@@ -70,12 +70,15 @@ window.EmberHands = (function () {
   }
 
   function waitForMediaPipe(cb, tries = 0) {
-    if (typeof Hands !== 'undefined' && typeof Camera !== 'undefined') {
+    // Check for MediaPipe's Camera (from camera_utils) — distinct from THREE.Camera
+    const mpHands  = typeof Hands !== 'undefined';
+    const mpCamera = typeof Camera !== 'undefined';
+    if (mpHands && mpCamera) {
       cb();
       return;
     }
     if (tries > 100) {
-      console.warn('MediaPipe not available — gesture navigation disabled.');
+      console.warn(`MediaPipe not available (Hands:${mpHands} Camera:${mpCamera}) — gesture navigation disabled.`);
       return;
     }
     setTimeout(() => waitForMediaPipe(cb, tries + 1), 100);

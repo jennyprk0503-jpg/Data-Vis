@@ -1,15 +1,20 @@
 /**
  * gestures.js — Gesture recognition and movement commands for "Embers"
  *
- * Detects:
- *  Gallery Mode: open palm (both = forward, right only = strafe right, left only = strafe left)
- *  Demo Mode:    fist (right = strafe right, left = strafe left, both = forward)
- *  Pinch:        thumb tip near index tip (either hand)
+ * Detection approach (scale-invariant):
+ *  - OPEN FINGER: tip.y < pip.y  (fingertip is above the mid-joint in image space)
+ *  - CURLED FINGER: tip.y > pip.y (fingertip has folded below mid-joint)
+ *  This works regardless of hand size or distance from camera.
  *
- * Stability features:
- *  - Frame smoothing: N consecutive frames required to confirm a gesture
- *  - Pinch cooldown: prevents double-fires
- *  - Deadzone: ignores borderline detections
+ * Navigation:
+ *  Gallery Mode — open palm:
+ *    Any palm visible → move forward
+ *    No hands / fists → stop
+ *  Demo Mode — fists:
+ *    Right fist → strafe right, Left fist → strafe left, Both → forward
+ *
+ * Stability: CONFIRM_FRAMES consecutive detections required to confirm.
+ * Pinch cooldown: PINCH_COOLDOWN_MS between select fires.
  */
 
 'use strict';
@@ -18,75 +23,59 @@ window.EmberGestures = (function () {
 
   // ── Thresholds ─────────────────────────────────────────────────────────────
 
-  // Pinch: distance between thumb tip and index tip (normalized 0–1)
-  const PINCH_THRESHOLD = 0.07;       // < this = pinch detected
-  const PINCH_DEADZONE  = 0.10;       // > this = definitely not pinch (hysteresis)
+  // Pinch: 3D distance between thumb tip (4) and index tip (8), normalized coords
+  // Raise if pinch fires too easily; lower if it never fires.
+  const PINCH_THRESHOLD = 0.07;
 
-  // Fist: average finger curl — how close fingertips are to palm
-  // Distance from tip to wrist < FIST_THRESHOLD (normalized) = fist
-  const FIST_THRESHOLD  = 0.30;
+  // Minimum fingers extended to call a hand "open palm" (out of 4 non-thumb fingers)
+  // Lower = more lenient (3 fingers = palm), raise to 4 if false positives
+  const PALM_MIN_FINGERS = 3;
 
-  // Palm open: all fingertips extended away from palm
-  // Average tip-to-wrist > PALM_THRESHOLD = open palm
-  const PALM_THRESHOLD  = 0.45;
+  // Maximum fingers extended to call a hand a "fist"
+  const FIST_MAX_FINGERS = 1;
 
-  // Palm facing camera: z-depth of wrist relative to fingertips
-  // If wrist.z > middle_tip.z by this much, hand faces camera
-  const PALM_FACING_Z   = 0.04;
+  // Frame smoothing: consecutive frames needed to confirm a gesture.
+  // Lower = faster response; higher = more stable. Was 5, now 3.
+  const CONFIRM_FRAMES = 3;
 
-  // Frame smoothing: require this many consecutive frames to confirm
-  // Increase for more stability, decrease for faster response.
-  const CONFIRM_FRAMES  = 5;
+  // Faster drop-off: frames subtracted per non-detected frame
+  const DROP_FRAMES = 2;
 
-  // Pinch cooldown in milliseconds (prevents double-select)
+  // Pinch cooldown in ms — prevents double-select
   const PINCH_COOLDOWN_MS = 600;
 
   // ── State ──────────────────────────────────────────────────────────────────
 
-  // Gesture mode: 'gallery' | 'demo'
   let gestureMode = 'gallery';
 
-  // Frame counters for each gesture (smoothing buffers)
+  // Rolling frame counts (incremented on detection, decremented on absence)
   const frameCount = {
-    leftFist:   0,
-    rightFist:  0,
-    leftPalm:   0,
-    rightPalm:  0,
-    pinch:      0,
+    leftFist: 0, rightFist: 0,
+    leftPalm: 0, rightPalm: 0,
+    pinch: 0,
   };
 
-  // Confirmed (smoothed) gesture states
+  // Smoothed confirmed states
   const confirmed = {
-    leftFist:   false,
-    rightFist:  false,
-    leftPalm:   false,
-    rightPalm:  false,
-    pinch:      false,
-  };
-
-  // Pinch timing
-  let lastPinchTime = 0;
-  let pinchFired    = false; // tracks if we've already fired for this pinch hold
-
-  // Latest movement intent (consumed by main.js each frame)
-  let moveIntent = { forward: 0, strafe: 0 }; // values: -1, 0, +1
-
-  // Pinch callback
-  let onPinchCb = null;
-
-  // Debug state output (read by ui.js)
-  let debugState = {
-    handsCount: 0,
-    leftFist: false,
-    rightFist: false,
-    bothFists: false,
-    leftPalm: false,
-    rightPalm: false,
-    bothPalms: false,
+    leftFist: false, rightFist: false,
+    leftPalm: false, rightPalm: false,
     pinch: false,
   };
 
-  // ── Public init ────────────────────────────────────────────────────────────
+  let lastPinchTime = 0;
+  let pinchFired = false;
+  let onPinchCb = null;
+
+  let moveIntent = { forward: 0, strafe: 0 };
+
+  let debugState = {
+    handsCount: 0,
+    leftFist: false, rightFist: false, bothFists: false,
+    leftPalm: false, rightPalm: false, bothPalms: false,
+    pinch: false,
+  };
+
+  // ── Init ───────────────────────────────────────────────────────────────────
 
   function init(onPinch) {
     onPinchCb = onPinch;
@@ -94,58 +83,53 @@ window.EmberGestures = (function () {
 
   function setMode(mode) {
     gestureMode = mode;
-    // Reset counters on mode switch
-    Object.keys(frameCount).forEach(k => frameCount[k] = 0);
-    Object.keys(confirmed).forEach(k => confirmed[k] = false);
+    Object.keys(frameCount).forEach(k => { frameCount[k] = 0; });
+    Object.keys(confirmed).forEach(k => { confirmed[k] = false; });
   }
 
-  // ── Main update (called each frame with latest hand data) ─────────────────
+  // ── Main update ────────────────────────────────────────────────────────────
 
   function update(hands) {
-    // hands: array from EmberHands.parseHands — [{label, landmarks}, ...]
-
     debugState.handsCount = hands.length;
 
-    // Find left and right hand landmarks
-    let leftHand  = null;
-    let rightHand = null;
+    let leftHand = null, rightHand = null;
     hands.forEach(h => {
       if (h.label === 'Left')  leftHand  = h.landmarks;
       if (h.label === 'Right') rightHand = h.landmarks;
     });
 
-    // Raw gesture detection this frame
+    // Raw single-frame detections
     const raw = {
-      leftFist:  leftHand  ? isFist(leftHand)  : false,
-      rightFist: rightHand ? isFist(rightHand) : false,
+      leftFist:  leftHand  ? isFist(leftHand)     : false,
+      rightFist: rightHand ? isFist(rightHand)    : false,
       leftPalm:  leftHand  ? isOpenPalm(leftHand)  : false,
       rightPalm: rightHand ? isOpenPalm(rightHand) : false,
-      pinch: (leftHand  && isPinch(leftHand))  ||
+      pinch: (leftHand  && isPinch(leftHand)) ||
              (rightHand && isPinch(rightHand)),
     };
 
-    // Apply frame smoothing
+    // Apply frame smoothing (hysteresis buffer)
     Object.keys(frameCount).forEach(key => {
       if (raw[key]) {
-        frameCount[key] = Math.min(frameCount[key] + 1, CONFIRM_FRAMES + 2);
+        frameCount[key] = Math.min(frameCount[key] + 1, CONFIRM_FRAMES + 4);
       } else {
-        frameCount[key] = Math.max(frameCount[key] - 2, 0); // faster drop-off
+        frameCount[key] = Math.max(frameCount[key] - DROP_FRAMES, 0);
       }
       confirmed[key] = frameCount[key] >= CONFIRM_FRAMES;
     });
 
-    // Derived states
     const bothFists = confirmed.leftFist && confirmed.rightFist;
     const bothPalms = confirmed.leftPalm && confirmed.rightPalm;
+    const anyPalm   = confirmed.leftPalm || confirmed.rightPalm;
 
-    // Update debug state
-    debugState.leftFist   = confirmed.leftFist;
-    debugState.rightFist  = confirmed.rightFist;
-    debugState.bothFists  = bothFists;
-    debugState.leftPalm   = confirmed.leftPalm;
-    debugState.rightPalm  = confirmed.rightPalm;
-    debugState.bothPalms  = bothPalms;
-    debugState.pinch      = confirmed.pinch;
+    // Update debug
+    debugState.leftFist  = confirmed.leftFist;
+    debugState.rightFist = confirmed.rightFist;
+    debugState.bothFists = bothFists;
+    debugState.leftPalm  = confirmed.leftPalm;
+    debugState.rightPalm = confirmed.rightPalm;
+    debugState.bothPalms = bothPalms;
+    debugState.pinch     = confirmed.pinch;
 
     // ── Movement intent ──────────────────────────────────────────────────────
 
@@ -153,112 +137,90 @@ window.EmberGestures = (function () {
     moveIntent.strafe  = 0;
 
     if (gestureMode === 'gallery') {
-      // Gallery Mode: open palm gestures
-      // Both palms → move forward
-      if (bothPalms) {
-        moveIntent.forward = 1;
+      // ANY open palm → move forward (most intuitive)
+      // Strafe: one palm present, specifically left or right only
+      if (anyPalm) {
+        if (bothPalms) {
+          // Both palms → go forward
+          moveIntent.forward = 1;
+        } else if (confirmed.rightPalm && !confirmed.leftPalm) {
+          // Right only → strafe right
+          moveIntent.strafe = 1;
+        } else if (confirmed.leftPalm && !confirmed.rightPalm) {
+          // Left only → strafe left
+          moveIntent.strafe = -1;
+        }
       }
-      // Right palm only → strafe right
-      else if (confirmed.rightPalm && !confirmed.leftPalm) {
-        moveIntent.strafe = 1;
-      }
-      // Left palm only → strafe left
-      else if (confirmed.leftPalm && !confirmed.rightPalm) {
-        moveIntent.strafe = -1;
-      }
-      // Otherwise stop (hands out of frame or no recognized gesture)
+      // No palm / fists / no hands → stop (moveIntent stays 0)
 
     } else {
       // Demo Mode: fist gestures
-      // Both fists → move forward
       if (bothFists) {
         moveIntent.forward = 1;
-      }
-      // Right fist only → strafe right
-      else if (confirmed.rightFist && !confirmed.leftFist) {
+      } else if (confirmed.rightFist && !confirmed.leftFist) {
         moveIntent.strafe = 1;
-      }
-      // Left fist only → strafe left
-      else if (confirmed.leftFist && !confirmed.rightFist) {
+      } else if (confirmed.leftFist && !confirmed.rightFist) {
         moveIntent.strafe = -1;
       }
     }
 
-    // ── Pinch firing ─────────────────────────────────────────────────────────
+    // ── Pinch ────────────────────────────────────────────────────────────────
+
     const now = performance.now();
     if (confirmed.pinch && !pinchFired) {
-      // Cooldown check (600ms — adjust PINCH_COOLDOWN_MS above)
       if (now - lastPinchTime > PINCH_COOLDOWN_MS) {
         lastPinchTime = now;
         pinchFired = true;
         if (onPinchCb) onPinchCb();
       }
     }
-    if (!confirmed.pinch) {
-      pinchFired = false; // reset so next pinch can fire
-    }
+    if (!confirmed.pinch) pinchFired = false;
   }
 
-  // ── Low-level gesture detectors ───────────────────────────────────────────
+  // ── Gesture detectors (scale-invariant) ───────────────────────────────────
 
   /**
-   * Fist: all four fingertips are close to the wrist.
-   * Measured as average of tip-to-wrist distances (normalized image coords).
-   */
-  function isFist(lm) {
-    const wrist = lm[0];
-    // Check index, middle, ring, pinky tips
-    const tipIndices = [8, 12, 16, 20];
-    let sum = 0;
-    tipIndices.forEach(idx => {
-      sum += dist2D(lm[idx], wrist);
-    });
-    const avg = sum / tipIndices.length;
-    return avg < FIST_THRESHOLD;
-  }
-
-  /**
-   * Open Palm: all fingertips are well away from the wrist.
-   * Uses average tip-to-wrist distance.
+   * Open palm: count how many non-thumb fingers are extended.
+   * A finger is "extended" when its tip is ABOVE its PIP joint in image space
+   * (tip.y < pip.y, since y=0 is top of image in MediaPipe normalized coords).
+   *
+   * This is scale-invariant — works at any hand distance from camera.
    */
   function isOpenPalm(lm) {
-    const wrist = lm[0];
-    const tipIndices = [8, 12, 16, 20];
-    let sum = 0;
-    tipIndices.forEach(idx => {
-      sum += dist2D(lm[idx], wrist);
+    // [tip_index, pip_index] for each finger (index, middle, ring, pinky)
+    const fingers = [[8, 6], [12, 10], [16, 14], [20, 18]];
+    let extended = 0;
+    fingers.forEach(([tip, pip]) => {
+      // tip.y < pip.y → tip is higher in the image → finger is extended upward
+      if (lm[tip].y < lm[pip].y) extended++;
     });
-    const avg = sum / tipIndices.length;
-    return avg > PALM_THRESHOLD;
+    return extended >= PALM_MIN_FINGERS; // at least 3 of 4 fingers open
   }
 
   /**
-   * Pinch: thumb tip (4) and index tip (8) are very close.
-   * Uses 3D distance including z-depth for better accuracy.
+   * Fist: most fingers are curled — tip is BELOW (higher y) their PIP joint.
+   */
+  function isFist(lm) {
+    const fingers = [[8, 6], [12, 10], [16, 14], [20, 18]];
+    let extended = 0;
+    fingers.forEach(([tip, pip]) => {
+      if (lm[tip].y < lm[pip].y) extended++;
+    });
+    // A fist has at most FIST_MAX_FINGERS extended
+    return extended <= FIST_MAX_FINGERS;
+  }
+
+  /**
+   * Pinch: thumb tip (4) close to index tip (8).
+   * Uses 3D distance for better accuracy (MediaPipe provides z-depth estimate).
    */
   function isPinch(lm) {
-    const thumbTip = lm[4];
-    const indexTip = lm[8];
-    const d = dist3D(thumbTip, indexTip);
-    return d < PINCH_THRESHOLD;
+    const t = lm[4], i = lm[8];
+    const dx = t.x - i.x, dy = t.y - i.y, dz = (t.z || 0) - (i.z || 0);
+    return Math.sqrt(dx*dx + dy*dy + dz*dz) < PINCH_THRESHOLD;
   }
 
-  // ── Distance helpers ──────────────────────────────────────────────────────
-
-  function dist2D(a, b) {
-    const dx = a.x - b.x;
-    const dy = a.y - b.y;
-    return Math.sqrt(dx * dx + dy * dy);
-  }
-
-  function dist3D(a, b) {
-    const dx = a.x - b.x;
-    const dy = a.y - b.y;
-    const dz = (a.z || 0) - (b.z || 0);
-    return Math.sqrt(dx * dx + dy * dy + dz * dz);
-  }
-
-  // ── Public API ────────────────────────────────────────────────────────────
+  // ── Public API ─────────────────────────────────────────────────────────────
 
   return {
     init,
@@ -266,7 +228,7 @@ window.EmberGestures = (function () {
     setMode,
     getMoveIntent: () => ({ ...moveIntent }),
     getDebugState: () => ({ ...debugState }),
-    getConfirmed: () => ({ ...confirmed }),
+    getConfirmed:  () => ({ ...confirmed }),
   };
 
 })();

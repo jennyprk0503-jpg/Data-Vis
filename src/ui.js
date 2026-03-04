@@ -30,6 +30,7 @@ window.EmberUI = (function () {
   let elDbgLpalm, elDbgRpalm, elDbgBpalm, elDbgPinch;
   let elBtnGallery, elBtnDemo;
   let elLoading;
+  let elGsLeft, elGsRight, elGsAction;
 
   // ── Init ───────────────────────────────────────────────────────────────────
 
@@ -55,7 +56,10 @@ window.EmberUI = (function () {
     elBtnGallery = document.getElementById('btn-gallery');
     elBtnDemo    = document.getElementById('btn-demo');
 
-    elLoading = document.getElementById('loading');
+    elLoading  = document.getElementById('loading');
+    elGsLeft   = document.getElementById('gs-left');
+    elGsRight  = document.getElementById('gs-right');
+    elGsAction = document.getElementById('gs-action');
 
     // D key toggles debug HUD
     document.addEventListener('keydown', (e) => {
@@ -113,6 +117,9 @@ window.EmberUI = (function () {
   }
 
   function updateDebug(state, fps) {
+    // Always update gesture status indicator (visible regardless of debug mode)
+    updateGestureStatus(state);
+
     if (!debugVisible || !elDebug) return;
 
     elDbgFps.textContent   = fps.toFixed(1);
@@ -125,6 +132,35 @@ window.EmberUI = (function () {
     setBool(elDbgRpalm,  state.rightPalm);
     setBool(elDbgBpalm,  state.bothPalms);
     setBool(elDbgPinch,  state.pinch);
+  }
+
+  function updateGestureStatus(state) {
+    if (!elGsLeft || !elGsRight || !elGsAction) return;
+
+    // Left hand indicator
+    elGsLeft.className = 'gs-hand' +
+      (state.pinch       ? ' pinch'  :
+       state.leftPalm    ? ' active' :
+       state.leftFist    ? ' active' : '');
+
+    // Right hand indicator
+    elGsRight.className = 'gs-hand' +
+      (state.pinch       ? ' pinch'  :
+       state.rightPalm   ? ' active' :
+       state.rightFist   ? ' active' : '');
+
+    // Action label
+    let label = 'no hands';
+    if (state.pinch)           label = 'pinch';
+    else if (state.bothPalms)  label = 'forward';
+    else if (state.rightPalm && !state.leftPalm)  label = 'right';
+    else if (state.leftPalm  && !state.rightPalm) label = 'left';
+    else if (state.bothFists)  label = 'forward';
+    else if (state.rightFist || state.leftFist)    label = 'strafe';
+    else if (state.handsCount > 0)                 label = 'seen';
+
+    elGsAction.textContent = label;
+    elGsAction.className   = 'gs-label' + (label !== 'no hands' && label !== 'seen' ? ' moving' : '');
   }
 
   function setBool(el, val) {
